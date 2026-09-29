@@ -3,9 +3,6 @@
 
 A bare-metal, real-time secure audio recording, encryption, and playback station engineered in C for a soft-core **RISC-V processor** on the **Intel Cyclone V SoC (DE1-SoC)**. 
 
-### Academic Integrity Policy Disclaimer
-In accordance with the **University of Toronto Code of Behaviour on Academic Matters**, complete hardware build configurations and restricted university coursework source files are removed from this public repository to safeguard the academic integrity of future course offerings. This repo serves as a **public technical specification, architectural review, and bare-metal embedded systems showcase**. Full execution proofs, architectural schematics, and UI captures are documented below. 
-
 The system implements low-level register MMIO drivers to interface directly with the onboard Wolfson WM8731 audio codec, PS/2 keyboard controller, VGA character/pixel buffers, and pushbuttons via Machine-Mode hardware interrupts. Encrypted audio is scrambled using a custom **AES-128 Counter (CTR) Mode** stream cipher keyed via PS/2 password authentication.
 
 
