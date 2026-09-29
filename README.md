@@ -91,6 +91,7 @@ The interrupt routine is declared with `__attribute__((interrupt("machine")))`, 
 
 ---
 
+
 ## 📊 VGA Telemetry & Visual State Machine
 
 The graphical display pipeline continuously monitors system state, rendering custom HUD elements, dynamic audio waveforms, and security dialogs:
