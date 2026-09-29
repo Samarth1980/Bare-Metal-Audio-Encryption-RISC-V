@@ -32,3 +32,37 @@ The firmware runs bare-metal without an operating system, executing machine inst
 ## 🔐 Cryptographic Engine: AES-128 CTR
 
 The firmware implements the complete NIST Advanced Encryption Standard specification operating in **Counter (CTR) Mode**:
+
+### 1. Zero-Latency Stream Transformation
+Standard ECB/CBC block modes require block padding and introduce latency unsuitable for continuous streaming audio. CTR mode transforms AES into an **additive stream cipher**:
+$$C_i = P_i \oplus \text{AES}_{K}(\text{Nonce} \parallel \text{Counter}_i)$$
+* Encryption and decryption routines are mathematically identical: applying the same passphrase against scrambled audio runs the identical CTR keystream generation, XOR-restoring the original PCM waveform.
+* Processes $80{,}000$ stereo audio samples per slot across 20,000 counter block increments without memory leaks or buffer overflows.
+
+### 2. Key Derivation & Expansion
+* **Passphrase Ingestion:** Passwords up to 10 characters are entered via a PS/2 keyboard interface and scrambled using an **FNV-1a 32-bit hash** with non-linear bitwise spreading across 16 bytes.
+* **10-Round Key Expansion:** Expands the 16-byte master key into 176 bytes of round keys utilizing Rijndael S-box byte substitution, cyclic word rotations, and round constants ($R_{\text{con}}$).
+* **Galois Field Arithmetic:** Column diffusion is evaluated over $GF(2^8)$ utilizing an optimized `xtime()` bitwise multiplier polynomial ($x^8 + x^4 + x^3 + x + 1 \equiv \text{0x11B}$).
+
+---
+
+## ⚡ Hardware Architecture & MMIO Map
+
+The system bypasses operating system abstractions, reading and writing to physical registers via volatile pointers:
+
+| Subsystem / Peripheral | Base Address | Register Offset / Width | Functionality |
+| :--- | :--- | :--- | :--- |
+| **Audio Core FIFO** | `0xFF203040` | `+0x0` Control, `+0x4` Fifospace, `+0x8` Left, `+0xC` Right | Dual-channel 16-bit PCM read/write FIFO queue |
+| **Pushbuttons (KEYs)** | `0xFF200050` | `+0x0` Data, `+0x8` Interruptmask, `+0xC` Edgecapture | Hardware button interrupts and debouncing |
+| **Slider Switches (SW)** | `0xFF200040` | 32-bit register (`0x3FF` mask) | Live active memory bank slot selection (0–9) |
+| **Red LEDs** | `0xFF200000` | 32-bit register (`0x3FF` mask) | Passkey character count and recording timer countdown |
+| **PS/2 Controller** | `0xFF200100` | `+0x0` Data / RVALID bit (`0x8000`) | Make/break scancode stream from keyboard |
+| **VGA Pixel Buffer** | `0x08000000` | Address: `Base + (y << 10) + (x << 1)` | 320×240 16-bit RGB565 framebuffer graphics |
+| **VGA Character Buffer** | `0x09000000` | Address: `Base + (y << 7) + x` | 80×60 ASCII character text generation overlay |
+
+---
+
+## 🎛️ Bare-Metal Interrupt Control (RISC-V Machine Mode)
+
+Hardware responsiveness is driven through the RISC-V Machine-Mode Control and Status Registers (CSRs):
+
