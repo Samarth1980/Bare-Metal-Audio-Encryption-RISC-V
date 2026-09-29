@@ -66,3 +66,65 @@ The system bypasses operating system abstractions, reading and writing to physic
 
 Hardware responsiveness is driven through the RISC-V Machine-Mode Control and Status Registers (CSRs):
 
+```c
+// Vector base setup to custom ISR
+__asm__ __volatile__ ("csrw mtvec, %0" : : "r"(button_isr));
+
+// Unmask External Interrupt 18 (Pushbuttons)
+int mie_bits = (1 << 18); 
+__asm__ __volatile__ ("csrs mie, %0" : : "r"(mie_bits));
+
+// Global interrupt enable (MIE bit 3 in mstatus)
+int mstatus_bits = (1 << 3);
+__asm__ __volatile__ ("csrs mstatus, %0" : : "r"(mstatus_bits));
+```
+
+### Context Switching in `button_isr()`
+The interrupt routine is declared with `__attribute__((interrupt("machine")))`, compelling the compiler to generate automatic context-saving prologues/epilogues across all volatile registers before executing `mret`:
+1. Reads `mcause` to isolate exception code 18 (External Pushbutton IRQ).
+2. Evaluates the `Edgecapture` register (`0xFF20005C`) to dispatch functions:
+   * **KEY[0]:** Initiates voice-activated audio recording into active slot.
+   * **KEY[1]:** Starts DAC audio streaming with a real-time VGA playhead.
+   * **KEY[2]:** Opens AES Secure Terminal for encryption/decryption passkey entry.
+   * **KEY[3]:** Executes fast inter-slot buffer transfers (`memcpy`).
+3. Clears edge flags atomically to prevent re-entrant interrupt storms.
+
+---
+
+## 📊 VGA Telemetry & Visual State Machine
+
+The graphical display pipeline continuously monitors system state, rendering custom HUD elements, dynamic audio waveforms, and security dialogs:
+
+### 1. Voice-Activated Audio Capture
+Monitors ambient input through the microphone until sample amplitude exceeds the threshold. Once triggered, it captures 80,000 samples at 8 kHz while drawing the live waveform and updating a 10-second countdown on the 10 onboard LEDs and VGA HUD.
+
+![VGA Audio Recording](./VGA_RecordingAudio.png)
+
+### 2. Live Oscilloscope & Memory Slot Inspection
+Inspects stored PCM data across all 10 independent slots. Drawing routines plot peak amplitudes relative to the vertical centerline ($y = 120$) in RGB565 color. During playback, a synchronized vertical playhead sweeps across the screen.
+
+![VGA Viewing Stored Audio](./VGA_ViewingEncryption.png)
+
+### 3. AES-128 Secure Encryption Terminal
+Upon asserting KEY[2], the screen shifts to a secure entry terminal. PS/2 make codes (`0x1C`–`0x4D`) are mapped via an ASCII lookup table, rendering masked input asterisks while preventing buffer overruns. Once confirmed with `ENTER` (`0x5A`), the UI turns red while the cipher executes in-place.
+
+![VGA Encrypting Audio](./VGA_EncryptingAudio.png)
+
+### 4. Hardware Slot Transfer Utility
+Pressing KEY[3] enters the memory transfer utility. Users select a target bank via physical toggle switches `SW[0]` through `SW[9]`. A second press executes an optimized block transfer (`memcpy`) of the 320 KB stereo buffer between hardware slots.
+
+![VGA Memory Transfer](./VGA_FPGASlotTransfer.png)
+
+---
+
+## 🛠️ Hardware Specifications
+
+* **Target Processor:** Soft-Core 32-bit RISC-V Processor (RV32I)
+* **Development Platform:** Intel Cyclone V SoC FPGA (DE1-SoC Development Kit)
+* **Audio Codec:** Wolfson WM8731 (24-bit DAC/ADC configured for 8 kHz stereo playback)
+* **Sampling Depth:** 16-bit signed PCM, 80,000 samples per channel (10 seconds/slot)
+* **Storage Allocation:** 10 independent audio slots ($10 \times 80{,}000 \times 4\text{ bytes} \times 2 = 6.4\text{ MB}$ dynamic capacity)
+* **Display Output:** 320×240 pixel resolution (16-bit RGB565) + 80×60 character overlay
+* **Input Interfaces:** PS/2 Alphanumeric Keyboard, 4× Debounced Pushbuttons, 10× Toggle Switches
+* **Toolchain:** RISC-V GNU Toolchain (`riscv32-unknown-elf-gcc`), Intel Quartus Prime
+
